@@ -33,7 +33,7 @@ PR Flow는 머지 버튼(`merge`, 기본은 꺼짐)을 켜지 않는 한 조회�
 
 ## 현재 상태
 
-초기 버전(0.3.0)입니다. macOS의 `herdr-app` 0.1.12에서 실제 PR과 Claude Code 에이전트로 시험했습니다. Codex, Linux, Windows, 원격 머신은 아직 시험하지 않았습니다.
+초기 버전입니다. 현재 버전과 변경 내용은 [Releases](https://github.com/jjangsky/herdr-pr-flow/releases)에서 볼 수 있습니다. macOS의 `herdr-app` 0.1.12에서 실제 PR과 Claude Code 에이전트로 시험했습니다. Codex, Linux, Windows, 원격 머신은 아직 시험하지 않았습니다.
 
 ## 준비물
 
@@ -59,7 +59,7 @@ Herdr 안의 에이전트에게 맡겨도 됩니다.
 Read ~/.config/herdr-app/AGENTS.md, then add this mod: github.com/jjangsky/herdr-pr-flow
 ```
 
-업데이트하려면 폴더를 다시 복사합니다. 제거하려면 `cmd-shift-l`로 이전 레이아웃으로 돌아간 뒤 `~/.config/herdr-app/mods/pr-flow`와 `~/.config/herdr-app/layouts/main-pr.json`을 지웁니다. 터미널과 에이전트는 영향을 받지 않습니다.
+업데이트하려면 클론한 폴더에서 `git pull`을 실행한 뒤 폴더를 다시 복사합니다. 제거하려면 `cmd-shift-l`로 이전 레이아웃으로 돌아간 뒤 `~/.config/herdr-app/mods/pr-flow`와 `~/.config/herdr-app/layouts/main-pr.json`을 지웁니다. 터미널과 에이전트는 영향을 받지 않습니다.
 
 ## 사용법
 
@@ -209,6 +209,17 @@ python3 scripts/demo/capture.py /tmp/prdemo ko out   # README 화면을 샘플 �
 ```
 
 이 모드는 의존성 없는 순수 JavaScript입니다. 앱과 직접 닿는 파일은 `main.js`뿐이라, 나머지는 테스트에서 Node로 실행됩니다. `RECIPE.md`는 모드를 다시 만들기 위한 안내서입니다. `capture.py`는 Pillow가 필요하고, 1분 정도 별도의 Herdr 창을 엽니다.
+
+### 릴리스
+
+최신 `main`에서 버전을 올리고 태그를 푸시합니다. 수정은 `patch`, 새 기능은 `minor`를 씁니다.
+
+```sh
+npm version minor -m "Release v%s"
+git push origin main --follow-tags
+```
+
+태그가 올라가면 테스트를 돌린 뒤, 머지된 PR로 노트를 만들어 GitHub 릴리스를 발행합니다. 태그가 `package.json`과 다르면 실패합니다.
 
 ## 라이선스
 

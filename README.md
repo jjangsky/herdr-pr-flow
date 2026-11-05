@@ -33,7 +33,7 @@ PR Flow only reads, unless you turn on the merge button (`merge`, off by default
 
 ## Status
 
-Early release (0.3.0). It has been run on macOS with `herdr-app` 0.1.12 against real pull requests and real Claude Code agents. Codex, Linux, Windows and remote machines haven't been tried.
+Early release. See [Releases](https://github.com/jjangsky/herdr-pr-flow/releases) for the current version and what changed. It has been run on macOS with `herdr-app` 0.1.12 against real pull requests and real Claude Code agents. Codex, Linux, Windows and remote machines haven't been tried.
 
 ## Requirements
 
@@ -59,7 +59,7 @@ Or ask an agent running in Herdr:
 Read ~/.config/herdr-app/AGENTS.md, then add this mod: github.com/jjangsky/herdr-pr-flow
 ```
 
-To update, copy the folder again. To remove it, press `cmd-shift-l` to go back to your earlier layout, then delete `~/.config/herdr-app/mods/pr-flow` and `~/.config/herdr-app/layouts/main-pr.json`. Your terminals and agents aren't affected.
+To update, run `git pull` in your clone and copy the folder again. To remove it, press `cmd-shift-l` to go back to your earlier layout, then delete `~/.config/herdr-app/mods/pr-flow` and `~/.config/herdr-app/layouts/main-pr.json`. Your terminals and agents aren't affected.
 
 ## Using it
 
@@ -209,6 +209,17 @@ python3 scripts/demo/capture.py /tmp/prdemo en out   # redraws the README's scre
 ```
 
 The mod is plain JavaScript with no dependencies. Only `main.js` touches the app, so the rest runs under Node in tests. `RECIPE.md` is the brief for rebuilding it. `capture.py` needs Pillow, and opens a separate Herdr window for about a minute.
+
+### Releasing
+
+From an up-to-date `main`, bump the version and push the tag. `patch` is for fixes, `minor` for new features:
+
+```sh
+npm version minor -m "Release v%s"
+git push origin main --follow-tags
+```
+
+The tag runs the tests and publishes a GitHub release with notes from the merged PRs. A tag that doesn't match `package.json` fails.
 
 ## License
 
