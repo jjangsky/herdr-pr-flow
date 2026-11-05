@@ -1,5 +1,5 @@
-// Every call here only reads, except `merge`, which runs only when the `merge` prop is set and you
-// press the button twice.
+// Every call here only reads, with two exceptions you start yourself: `comment`, when you send a
+// comment on a diff line, and `merge`, when the `merge` prop is set and you press the button twice.
 // `exec` is the app's: (command, args, options) => Promise<{code, stdout, stderr}>.
 const PR_FIELDS = [
   'number', 'title', 'body', 'url', 'state', 'isDraft', 'headRefName', 'headRefOid', 'baseRefName',
@@ -8,7 +8,7 @@ const PR_FIELDS = [
 ].join(',');
 
 const THREADS_QUERY = `query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){
-  reviewThreads(first:100){nodes{isResolved isOutdated path line comments(first:1){nodes{author{login} body}}}}
+  reviewThreads(first:100){nodes{isResolved isOutdated path line diffSide comments(first:20){nodes{author{login} body}}}}
   commits(last:1){nodes{commit{committedDate}}}
   closingIssuesReferences(first:10){nodes{number title state stateReason url repository{nameWithOwner}}}
 }}}`;
@@ -67,6 +67,12 @@ export function createGh(exec) {
     })),
     fetchIssue: (url) => json(['issue', 'view', url, '--json', 'number,title,state,stateReason,body,author,labels,comments,url,createdAt']),
     fetchDiff: (url) => run(['pr', 'diff', url, '--color', 'never']),
+    fetchHead: async (url) => (await json(['pr', 'view', url, '--json', 'headRefOid'])).headRefOid,
+    // A review comment on one line of the diff. -f keeps the text literal.
+    comment: async (url, { commitId, path, line, side, body }) => {
+      const p = parsePrUrl(url);
+      await run(['api', '-X', 'POST', `repos/${p.repo}/pulls/${p.number}/comments`, '-f', `body=${body}`, '-f', `commit_id=${commitId}`, '-f', `path=${path}`, '-F', `line=${line}`, '-f', `side=${side}`]);
+    },
     failedLog: async (repo, runId) => cleanRunLog(await run(['run', 'view', runId, '-R', repo, '--log-failed'])),
     // Merges exactly the commit that was shown: if something was pushed since, gh refuses.
     merge: async (url, method, headSha) => {

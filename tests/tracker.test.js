@@ -156,6 +156,13 @@ test('createGh merges only the shown commit, with a known method', async () => {
   assert.equal(seen.length, 1);
 });
 
+test('createGh posts a review comment on one line, keeping the text literal', async () => {
+  const seen = [];
+  const gh = createGh(async (cmd, args) => { seen.push([cmd, ...args]); return { code: 0, stdout: '', stderr: '' }; });
+  await gh.comment(URL, { commitId: 'abc', path: 'src/a.js', line: 5, side: 'LEFT', body: '@file `$(x)`' });
+  assert.deepEqual(seen, [['gh', 'api', '-X', 'POST', 'repos/o/r/pulls/7/comments', '-f', 'body=@file `$(x)`', '-f', 'commit_id=abc', '-f', 'path=src/a.js', '-F', 'line=5', '-f', 'side=LEFT']]);
+});
+
 test('createGh turns a failed command into an error with its message', async () => {
   const gh = createGh(async () => ({ code: 1, stdout: '', stderr: 'nope' }));
   await assert.rejects(gh.fetchDiff(URL), /nope/);

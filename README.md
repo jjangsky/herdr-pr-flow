@@ -10,7 +10,7 @@ A side panel for the [Herdr app](https://herdr.dev) that shows every pull reques
 
 *The real mod in the Herdr app, drawn with made-up projects and data.*
 
-PR Flow only reads, unless you turn on the merge button (`merge`, off by default). It never sends anything to an agent. When something needs doing, jump to the agent and tell it there.
+PR Flow only reads, with two exceptions you start yourself: sending a comment on a diff line, and the merge button (`merge`, off by default). It never sends anything to an agent. When something needs doing, jump to the agent and tell it there.
 
 - **No setup.** A PR appears when an agent running in Herdr has one open on its branch.
 - **Plain facts.** `No CI` and `No review` say so, and never count as passed.
@@ -71,7 +71,7 @@ To update, run `git pull` in your clone and copy the folder again. To remove it,
 
 <img src="docs/images/en/merged.png" width="340" alt="A merged PR card showing Deploy Production on step 2 of 5">
 
-**3. Open the PR.** The timeline shows each stage with its time. Every workflow gets its own row. Below it are linked issues, open comments, changed files and the description.
+**3. Open the PR.** The timeline shows each stage with its time. Every workflow gets its own row. Below it are linked issues, open comments, changed files and the description. Click `Changed files` to fold the list. More than 10 files start folded.
 
 <img src="docs/images/en/pr-running.png" width="340" alt="A PR timeline with two workflows running">
 
@@ -84,6 +84,8 @@ To update, run `git pull` in your clone and copy the folder again. To remove it,
 <img src="docs/images/en/issue.png" width="340" alt="A linked issue open in the panel">
 
 **6. See the changes.** Click a changed file or a failed log to open it in a pane beside your terminal. Opening another file replaces what the pane shows.
+
+**Leave feedback.** In a diff, click a line, write your comment and press `Send` or `cmd-enter`. It's posted to the PR as a GitHub review comment, from your account, and open comments show under their lines. To have an agent act on it, jump to the agent and ask it to read the PR's comments.
 
 <img src="docs/images/en/diff.png" alt="A file diff in a pane beside the panel">
 
@@ -174,6 +176,7 @@ Everything else goes in the block's `props` in your layout file (`~/.config/herd
 This is what the mod does on your machine, all with your own login. It stores no credentials.
 
 - `gh pr list`, `gh search prs --author @me` (with `mine`), `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view` and read-only `gh api` calls
+- When you send a comment: `gh api -X POST repos/<repo>/pulls/<number>/comments`
 - With `merge`, when you press the button twice: `gh pr merge <url> --<method> --match-head-commit <sha>`. No `--admin`, no branch deletion
 - `git remote get-url origin` in each agent's folder
 - `sh` to read your language, and `defaults` on macOS when the app has no `LANG`
@@ -195,6 +198,7 @@ This is what the mod does on your machine, all with your own login. It stores no
 - PRs are found through agents running in Herdr. PRs you opened elsewhere aren't listed unless `mine` is on. PRs that only ask for your review aren't listed.
 - The refresh button updates listed PRs. It doesn't look for new ones, which arrive on the timer above.
 - Step-by-step tracking is for GitHub Actions after a merge. Before a merge you see each check's name and result. Deploys outside Actions, such as Vercel, aren't shown.
+- Comments go on one line of the diff, and each is sent right away, not as a batch. A thread shows up to 20 comments.
 - A flow across two PRs, such as `development` then `live`, shows as two separate PRs.
 - After a merge, a listed issue's state isn't refreshed. Opening the issue always loads it fresh.
 - Herdr must be running for the panel to refresh. The repo must be on GitHub, and the remote must be called `origin`.

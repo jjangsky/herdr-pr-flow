@@ -40,3 +40,41 @@ export function parseDiff(text) {
   }
   return files;
 }
+
+// What a review comment on this line needs: GitHub's line number and side. Null for headers.
+export function commentTarget(line) {
+  if (line?.kind === 'add' || line?.kind === 'ctx') return { line: line.newNo, side: 'RIGHT' };
+  if (line?.kind === 'del') return { line: line.oldNo, side: 'LEFT' };
+  return null;
+}
+
+// Long lines split so a comment reads without scrolling sideways.
+function wrap(text, width) {
+  const out = [];
+  for (const line of String(text ?? '').split('\n')) {
+    if (!line) { out.push(''); continue; }
+    for (let i = 0; i < line.length; i += width) out.push(line.slice(i, i + width));
+  }
+  return out;
+}
+
+// A file's rows with its open review threads under the lines they're on. Rows stay one height:
+// each comment becomes an author row and one row per line of text.
+export function withComments(lines, threads, path, width = 90) {
+  const open = (threads ?? []).filter((x) => x.path === path && x.line && !x.isResolved && !x.isOutdated);
+  if (!open.length) return lines;
+  const rows = [];
+  for (const line of lines) {
+    rows.push(line);
+    const at = commentTarget(line);
+    if (!at) continue;
+    for (const thread of open) {
+      if (thread.line !== at.line || (thread.diffSide ?? 'RIGHT') !== at.side) continue;
+      for (const c of thread.comments?.nodes ?? []) {
+        rows.push({ kind: 'comment-head', text: c.author?.login ?? '' });
+        for (const text of wrap(c.body, width)) rows.push({ kind: 'comment', text });
+      }
+    }
+  }
+  return rows;
+}
