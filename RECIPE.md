@@ -1,6 +1,6 @@
 # PR Flow
 
-A full-height panel on the right of the Herdr window. It lists every open pull request that belongs to a branch an agent is working on, and shows where each one is: CI, review, merge, then the GitHub Actions workflows that run on the merge commit. Clicking a PR swaps the list for its detail in the same panel. It only reads, unless the `merge` prop turns on a merge button.
+A full-height panel on the right of the Herdr window. It lists every open pull request that belongs to a branch an agent is working on, and shows where each one is: CI, review, merge, then the GitHub Actions workflows that run on the merge commit. Clicking a PR swaps the list for its detail in the same panel. It only reads, except when you send a comment on a diff line or the `merge` prop turns on a merge button.
 
 ![PR Flow](preview.png)
 
@@ -48,6 +48,7 @@ Programs: `gh` (`pr list`, `pr view`, `pr diff`, `issue view`, `run view`, `auth
 
 - The merge button (`merge`: `"squash"`, `"merge"` or `"rebase"`; anything else, no button) shows under the branch line only when the PR is open, not a draft, `mergeable` is `MERGEABLE` and the state is `ready`. 32 px, radius 8, `raised`; armed, `ansi2` with `background` text for 4 s. It runs `gh pr merge <url> --<method> --match-head-commit <headRefOid shown>`, then refreshes the PR; an error shows under it in `ansi1`. Never `--admin`, never `--delete-branch`.
 
+- Changed files fold from their section header; more than 10 start folded. In the diff, the list's `on_item_click` opens a composer under the diff (a 3-row textarea, `Send`, `Cancel`; `cmd-enter`, `esc`). It runs `gh api -X POST repos/<repo>/pulls/<n>/comments` with `-f` for text, then reloads the threads. Open threads render as extra 20 px rows under their line, so the list keeps one row height. On failure the text stays and the error shows.
 - Shipped layouts don't take new panels: a mod with `place: "right"` docks only into a personal layout, so `layout.clone` first.
 - A virtual list's rows can't register `on_click`, and `herdr-app check` doesn't catch it, since it doesn't run deferred rows. The list is a plain scrolling column.
 - An app started from the Finder has no `LANG`. Fall back to `defaults read -g AppleLocale`.

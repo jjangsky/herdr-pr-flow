@@ -1,19 +1,20 @@
 // PR Flow: every PR your agents opened and where it is. A side panel with a list; a PR opens
 // in the same panel. It only reads: nothing here writes to GitHub or sends to an agent.
 import { View, div, svg } from "gpui-kit";
-import { v_flex, h_flex, Scrollbar, TextView, v_virtual_list } from "gpui-base";
+import { v_flex, h_flex, Scrollbar, TextView, v_virtual_list, TextareaState, Textarea } from "gpui-base";
 import { agents, panes, spaces, focused, exec, run, theme, props, settings, shared, setShared, nextCommand, window as appWindow } from "herdr";
 import { MERGE_METHODS, createGh, parseRemote, runIdFromUrl } from "./gh.js";
 import { createTracker } from "./tracker.js";
 import { translator, relative, effectiveLang } from "./i18n.js";
 import { facts, steps, openThreads, logTail, flowLine, flowRows, jobSteps, issueState, issueLabel, orgsOf, byOrg, reposOf, byRepo } from "./present.js";
-import { parseDiff } from "./diff.js";
+import { parseDiff, commentTarget, withComments } from "./diff.js";
 import { parseDuration, sanitize } from "./text.js";
 
 const MOD = "pr-flow";
 const VIEW_KEY = "pr-flow.view";
 const LANG_KEY = "pr-flow.lang";
 const TICK_MS = 5000;
+const FILES_FOLD_AT = 10; // more changed files than this start folded
 
 const icon = (name, size, color) => svg(`mods/${MOD}/${name}.svg`).size(size).flex_none().text_color(color);
 const toneColor = (t, tone) => ({ ok: t.ansi2, bad: t.ansi1, warn: t.blocked, wait: t.foreground, run: t.working, merge: t.ansi2, merged: t.ansi5, dim: t.dim, comment: t.muted, todo: t.dim }[tone] ?? t.muted);
@@ -87,7 +88,14 @@ export default class PrFlow extends View {
       const system = await systemLang();
       if (system !== this.system) { this.system = system; localStorage.setItem("lang", system); cx.notify(); }
     });
-    if (this.viewer) { this.loaded = null; this.file = 0; return; }
+    if (this.viewer) {
+      this.loaded = null; this.file = 0;
+      this.threads = []; this.head = null;
+      this.composing = null; // { path, line, side }: the line being commented on
+      this.sending = false; this.commentError = null;
+      this.commentInput = TextareaState.new({ rows: 3, placeholder: this.t("comment_placeholder") });
+      return;
+    }
 
     this.gh = createGh(exec);
     this.tracker = createTracker({
@@ -113,6 +121,7 @@ export default class PrFlow extends View {
     this.repo = localStorage.getItem("repo") || null; // within it, one repo; null: all of the owner's
     this.logs = new Map(); // run id -> { name, runId, repo, tail, full, failed }
     this.opened = new Set(); // timeline rows showing their steps or checks
+    this.filesFold = new Map(); // url -> whether the changed files are showing, once you chose
     this.issueUrl = null; // the issue open in the panel
     this.issueData = new Map(); // url -> issue, or { failed: true }
     this.ghReady = true;
@@ -163,6 +172,11 @@ export default class PrFlow extends View {
 
   toggle(key) {
     if (this.opened.has(key)) this.opened.delete(key); else this.opened.add(key);
+  }
+
+  // Long lists start folded, so they don't push the description out of reach.
+  filesOpen(card, count) {
+    return this.filesFold.get(card.url) ?? count <= FILES_FOLD_AT;
   }
 
   toggleRun(card, runId, cx) {
@@ -524,6 +538,7 @@ export default class PrFlow extends View {
     }
     const { pr, agent } = card;
     const all = [...steps(card, tr, now), ...flowRows(card, tr, now).map((r) => ({ ...r, run: true }))], threads = openThreads(card), files = pr.files ?? [], log = this.logBlock(card, t);
+    const filesOpen = this.filesOpen(card, pr.changedFiles ?? files.length);
     const logName = this.logFor(card)?.name;
     return v_flex().size_full().child(top)
       .child(v_flex().id("detail").flex_1().min_h(0).overflow_y_scrollbar()
@@ -555,16 +570,17 @@ export default class PrFlow extends View {
           v_flex().w_full().p(10).gap(4).rounded(8).bg(t.raised)
             .child(h_flex().w_full().gap(6).text_size(11).text_color(t.dim).child(div().min_w(0).truncate().child(sanitize(x.where))).child(div().flex_1()).child(div().flex_none().child(sanitize(x.who))))
             .child(div().text_size(12.5).child(sanitize(x.body).slice(0, 400)))))))
-        .child(h_flex().px(14).pt(16).pb(8).gap(6).items_center().text_size(11.5).font_medium().text_color(t.dim)
-          .child(div().child(tr("files", pr.changedFiles ?? files.length))).child(div().flex_1())
+        .child(h_flex().id("files-head").px(14).pt(16).pb(8).gap(6).items_center().text_size(11.5).font_medium().text_color(t.dim).cursor_pointer()
+          .on_click((_e, cx) => { this.filesFold.set(card.url, !filesOpen); cx.notify(); })
+          .child(div().child(tr("files", pr.changedFiles ?? files.length))).child(icon(filesOpen ? "down" : "arrow", 11, t.dim)).child(div().flex_1())
           .child(div().text_color(t.ansi2).child(`+${pr.additions ?? 0}`)).child(div().text_color(t.ansi1).child(`−${pr.deletions ?? 0}`)))
-        .child(v_flex().px(8).children(files.map((f, i) => {
+        .when(filesOpen, (e) => e.child(v_flex().px(8).children(files.map((f, i) => {
           const { dir, name } = fileLine(f.path);
           return h_flex().id(`f-${i}`).w_full().h(28).flex_none().px(6).gap(6).items_center().rounded(6).cursor_pointer().hover((s) => s.bg(t.hover))
             .on_click(() => this.showFile(card, f.path))
             .child(h_flex().flex_1().min_w(0).child(div().min_w(0).truncate().text_color(t.dim).child(dir)).child(div().flex_none().max_w(220).truncate().child(name)))
             .child(div().flex_none().text_size(11).text_color(t.ansi2).child(`+${f.additions}`)).child(div().flex_none().text_size(11).text_color(t.ansi1).child(`−${f.deletions}`));
-        })))
+        }))))
         .when(Boolean(pr.body?.trim()), (e) => e.child(this.section(tr("description"), t)).child(div().px(14).pb(16).text_size(12.5).child(TextView.markdown(`body-${card.number}`, pr.body))))
         .child(div().h(14).flex_none()));
   }
@@ -647,17 +663,85 @@ export default class PrFlow extends View {
     this.loaded = target.at;
     this.target = target;
     this.files = null; this.lines = null; this.viewError = false; this.file = 0;
+    this.threads = []; this.cancelComment();
     const gh = createGh(exec);
     cx.spawn(async (cx) => {
       try {
         if (target.kind === "log") this.lines = sanitize(await gh.failedLog(target.repo, target.runId)).split("\n");
         else {
-          this.files = parseDiff(await gh.fetchDiff(target.url)).map((f) => ({ ...f, lines: f.lines.map((l) => ({ ...l, text: sanitize(l.text) })) }));
+          this.gh = gh;
+          const [diff, head] = await Promise.all([gh.fetchDiff(target.url), gh.fetchHead(target.url)]);
+          this.head = head;
+          this.files = parseDiff(diff).map((f) => ({ ...f, lines: f.lines.map((l) => ({ ...l, text: sanitize(l.text) })) }));
           this.file = Math.max(0, this.files.findIndex((f) => f.path === target.path));
+          await this.loadThreads(target, cx);
         }
       } catch { this.viewError = true; }
       if (this.target === target) cx.notify();
     });
+  }
+
+  // Comments are extra: the diff still shows when they can't load.
+  async loadThreads(target, cx) {
+    try {
+      const { threads } = await this.gh.fetchThreads(target.url);
+      if (this.target !== target) return;
+      this.threads = threads.map((x) => ({ ...x, comments: { nodes: (x.comments?.nodes ?? []).map((c) => ({ author: { login: sanitize(c.author?.login ?? "") }, body: sanitize(c.body) })) } }));
+      cx.notify();
+    } catch {}
+  }
+
+  startComment(row, cx) {
+    const at = commentTarget(row);
+    if (!at || this.sending) return;
+    this.composing = { path: this.files[this.file].path, ...at };
+    this.commentError = null;
+    this.commentInput.focus();
+    cx.notify();
+  }
+
+  cancelComment() {
+    if (this.sending) return;
+    this.composing = null;
+    this.commentError = null;
+    this.commentInput?.set_value("");
+  }
+
+  sendComment(cx) {
+    const body = this.commentInput.value().trim(), at = this.composing, target = this.target;
+    if (!body || !at || this.sending) return;
+    this.sending = true;
+    this.commentError = null;
+    cx.notify();
+    cx.spawn(async (cx) => {
+      try {
+        await this.gh.comment(target.url, { commitId: this.head, body, ...at });
+        this.sending = false;
+        this.cancelComment();
+        await this.loadThreads(target, cx);
+      } catch (error) {
+        this.sending = false;
+        this.commentError = sanitize(error.message);
+      }
+      cx.notify();
+    });
+  }
+
+  composer(t) {
+    const tr = this.t, at = this.composing;
+    const button = (id, label, primary, action) => h_flex().id(id).h(28).px(12).flex_none().items_center().rounded(6).text_size(12).cursor_pointer()
+      .bg(primary ? t.solid : t.raised).text_color(primary ? t.solid_foreground : t.foreground).hover((s) => s.opacity(0.88)).on_click(action).child(label);
+    return v_flex().id("composer").w_full().flex_none().p(10).gap(8).border_t(1).border_color(t.border).text_size(12.5)
+      .on_key_down((e, cx) => {
+        if (e.key === "escape") { this.cancelComment(); cx.notify(); cx.stop_propagation(); }
+        else if (e.key === "enter" && e.modifiers?.platform) { this.sendComment(cx); cx.stop_propagation(); }
+      })
+      .child(div().truncate().text_size(11.5).text_color(t.dim).child(tr("comment_on", `${at.path}:${at.line}`)))
+      .child(Textarea.new(this.commentInput).w_full().px(8).py(6).rounded(6).border_1().border_color(t.accent).bg(t.raised).text_color(t.foreground))
+      .when(Boolean(this.commentError), (e) => e.child(div().text_size(11.5).text_color(t.ansi1).child(this.commentError)))
+      .child(h_flex().w_full().gap(6).items_center().child(div().flex_1().text_size(11).text_color(t.dim).child("⌘↵"))
+        .child(button("comment-cancel", tr("comment_cancel"), false, (_e, cx) => { this.cancelComment(); cx.notify(); }))
+        .child(button("comment-send", tr(this.sending ? "comment_sending" : "comment_send"), true, (_e, cx) => this.sendComment(cx))));
   }
 
   closeViewer() {
@@ -666,9 +750,15 @@ export default class PrFlow extends View {
   }
 
   viewerRow(l, t) {
+    if (l.kind === "comment-head" || l.kind === "comment") {
+      return h_flex().w_full().h(20).flex_none().pl(98).items_center().bg(t.raised)
+        .text_color(l.kind === "comment" ? t.foreground : t.dim).child(div().whitespace_nowrap().child(l.text || " "));
+    }
     if (l.kind === "hunk" || l.kind === "meta") return h_flex().w_full().h(20).flex_none().px(12).items_center().bg(t.raised).text_color(t.dim).child(div().truncate().child(l.text || "⋯"));
     const add = l.kind === "add", del = l.kind === "del";
-    return h_flex().w_full().h(20).flex_none().items_center().when(add, (e) => e.bg(t.ansi2 + "18")).when(del, (e) => e.bg(t.ansi1 + "18"))
+    const at = commentTarget(l), mine = this.composing;
+    const chosen = mine && at && mine.path === this.files[this.file]?.path && mine.line === at.line && mine.side === at.side;
+    return h_flex().w_full().h(20).flex_none().items_center().cursor_pointer().when(chosen, (e) => e.bg(t.selected)).when(!chosen && add, (e) => e.bg(t.ansi2 + "18")).when(!chosen && del, (e) => e.bg(t.ansi1 + "18"))
       .child(div().w(38).flex_none().text_right().text_color(t.dim).child(l.oldNo === undefined ? "" : String(l.oldNo)))
       .child(div().w(38).flex_none().text_right().text_color(t.dim).child(l.newNo === undefined ? "" : String(l.newNo)))
       .child(div().w(22).flex_none().text_center().text_color(add ? t.ansi2 : del ? t.ansi1 : t.dim).child(add ? "+" : del ? "-" : ""))
@@ -692,7 +782,8 @@ export default class PrFlow extends View {
     if (!this.files) return div().p(14).text_color(t.dim).child(tr("loading"));
     if (!this.files.length) return div().p(14).text_color(t.dim).child(tr("no_diff"));
     const narrow = (this.size?.width ?? 800) < 620;
-    const rows = this.files[this.file]?.lines ?? [];
+    const path = this.files[this.file]?.path;
+    const rows = withComments(this.files[this.file]?.lines ?? [], this.threads, path);
     return h_flex().flex_1().min_h(0).items_start()
       .child(v_flex().id("files").w(narrow ? 150 : 220).flex_none().h_full().p(6).gap(1).border_r(1).border_color(t.border).overflow_y_scrollbar().children(this.files.map((f, i) => {
         const { dir, name } = fileLine(f.path);
@@ -701,10 +792,11 @@ export default class PrFlow extends View {
           .child(div().w_full().truncate().text_size(12.5).child(name))
           .child(h_flex().w_full().gap(6).text_size(11).child(div().flex_1().min_w(0).truncate().text_color(t.dim).child(dir)).child(div().flex_none().text_color(t.ansi2).child(`+${f.added}`)).child(div().flex_none().text_color(t.ansi1).child(`−${f.removed}`)));
       })))
-      .child(div().flex_1().min_w(0).h_full().relative().font_family(mono()).text_size(11.5)
+      .child(v_flex().flex_1().min_w(0).h_full().child(div().flex_1().min_h(0).w_full().relative().font_family(mono()).text_size(11.5)
         .child(div().id("diff-x").size_full().overflow_x_scrollbar().child(div().w_full().min_w(Math.max(400, ...rows.map((l) => (l.text?.length ?? 0) * 7 + 130))).h_full().child(
-          v_virtual_list(`diff-${this.file}`, rows.length, 20, (i) => String(i), (r) => rows.slice(r.start, r.end).map((l) => this.viewerRow(l, t))).size_full())))
-        .child(Scrollbar.vertical(`diff-${this.file}`).viewport_from_layout().absolute().inset_0()));
+          v_virtual_list(`diff-${this.file}`, rows.length, 20, (i) => String(i), (r) => rows.slice(r.start, r.end).map((l) => this.viewerRow(l, t))).on_item_click((key, cx) => this.startComment(rows[Number(key)], cx)).size_full())))
+        .child(Scrollbar.vertical(`diff-${this.file}`).viewport_from_layout().absolute().inset_0()))
+        .child(this.composing ? this.composer(t) : div().w_full().flex_none().px(12).py(5).border_t(1).border_color(t.border).text_size(11).text_color(t.dim).child(tr("comment_hint"))));
   }
 
   renderViewer(t, cx) {

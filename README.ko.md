@@ -10,7 +10,7 @@
 
 *실제 모드를 Herdr 앱에서 실행한 화면입니다. 프로젝트와 데이터는 샘플입니다.*
 
-PR Flow는 머지 버튼(`merge`, 기본은 꺼짐)을 켜지 않는 한 조회만 합니다. 에이전트에게는 아무것도 보내지 않습니다. 할 일이 있으면 그 에이전트로 이동해서 직접 말하면 됩니다.
+PR Flow는 조회만 합니다. 예외는 직접 실행하는 두 가지, diff 줄에 코멘트를 보낼 때와 머지 버튼(`merge`, 기본은 꺼짐)을 쓸 때입니다. 에이전트에게는 아무것도 보내지 않습니다. 할 일이 있으면 그 에이전트로 이동해서 직접 말하면 됩니다.
 
 - **설정 없음:** Herdr에서 돌아가는 에이전트의 브랜치에 열린 PR이 있으면 자동으로 나타납니다.
 - **있는 그대로의 상태:** `CI 없음`, `리뷰 없음`은 없다고 표시하고, 통과로 치지 않습니다.
@@ -71,7 +71,7 @@ Read ~/.config/herdr-app/AGENTS.md, then add this mod: github.com/jjangsky/herdr
 
 <img src="docs/images/ko/merged.png" width="340" alt="Deploy Production이 5단계 중 2단계에 있는 머지된 PR 카드">
 
-**3. PR 열기:** 타임라인에 단계별 시각이 나오고, 워크플로마다 줄이 하나씩 생깁니다. 그 아래에 연결된 이슈, 안 끝난 코멘트, 변경 파일, 설명이 있습니다.
+**3. PR 열기:** 타임라인에 단계별 시각이 나오고, 워크플로마다 줄이 하나씩 생깁니다. 그 아래에 연결된 이슈, 안 끝난 코멘트, 변경 파일, 설명이 있습니다. `변경 파일`을 누르면 목록을 접고 펼 수 있고, 10개가 넘으면 접힌 채로 시작합니다.
 
 <img src="docs/images/ko/pr-running.png" width="340" alt="워크플로 2개가 실행 중인 PR 타임라인">
 
@@ -84,6 +84,8 @@ Read ~/.config/herdr-app/AGENTS.md, then add this mod: github.com/jjangsky/herdr
 <img src="docs/images/ko/issue.png" width="340" alt="패널에서 연 연결된 이슈">
 
 **6. 변경 내용 보기:** 변경 파일이나 실패 로그를 누르면 터미널 옆 pane에 열립니다. 다른 파일을 누르면 그 pane의 내용이 바뀝니다.
+
+**피드백 남기기:** diff에서 줄을 누르고 코멘트를 쓴 뒤 `보내기`나 `cmd-enter`를 누릅니다. 내 계정으로 PR에 GitHub 리뷰 코멘트가 달리고, 안 끝난 코멘트는 해당 줄 아래에 보입니다. 에이전트가 반영하게 하려면 그 에이전트로 이동해서 PR 코멘트를 읽으라고 말하면 됩니다.
 
 <img src="docs/images/ko/diff.png" alt="패널 옆 pane에 열린 파일 diff">
 
@@ -174,6 +176,7 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 이 모드가 PC에서 실행하는 명령입니다. 모두 사용자의 로그인으로 실행하고, 인증 정보는 저장하지 않습니다.
 
 - `gh pr list`, `gh search prs --author @me` (`mine`일 때), `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view`, 읽기 전용 `gh api` 호출
+- 코멘트를 보낼 때: `gh api -X POST repos/<repo>/pulls/<number>/comments`
 - `merge`를 켜고 버튼을 두 번 눌렀을 때: `gh pr merge <url> --<방식> --match-head-commit <sha>`. `--admin`도 브랜치 삭제도 하지 않음
 - 각 에이전트 폴더에서 `git remote get-url origin`
 - 언어를 읽는 `sh`, 앱에 `LANG`이 없을 때 macOS의 `defaults`
@@ -195,6 +198,7 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 - PR은 Herdr에서 돌아가는 에이전트를 통해 찾습니다. 다른 곳에서 올린 PR은 `mine`을 켜야 나옵니다. 리뷰 요청만 받은 PR은 나오지 않습니다.
 - 새로고침 버튼은 목록에 있는 PR만 갱신합니다. 새 PR은 위 주기에 맞춰 나타납니다.
 - 단계별 추적은 머지 후 GitHub Actions만 지원합니다. 머지 전에는 체크 이름과 결과까지 보여줍니다. Vercel처럼 Actions 밖에서 도는 배포는 보이지 않습니다.
+- 코멘트는 diff의 한 줄에 달리고, 모아 보내지 않고 바로 하나씩 올라갑니다. 스레드마다 코멘트를 20개까지 보여줍니다.
 - `development` 다음 `live`처럼 PR이 두 번 올라가는 흐름은 별개의 PR로 보입니다.
 - 머지 후에는 목록의 이슈 상태가 갱신되지 않습니다. 이슈 화면은 열 때마다 새로 불러옵니다.
 - Herdr가 켜져 있어야 갱신됩니다. 저장소는 GitHub에 있어야 하고, 원격 이름은 `origin`이어야 합니다.
