@@ -1,6 +1,6 @@
 {
   "name": "herdr-pr-flow",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "description": "Herdr app mod: a side panel with every PR your agents opened and where each one is.",
   "type": "module",
