@@ -12,7 +12,7 @@ A side panel for the [Herdr app](https://herdr.dev) that shows every pull reques
 
 PR Flow only reads, with two exceptions you start yourself: sending a comment on a diff line, and the merge button (`merge`, off by default). It never sends anything to an agent. When something needs doing, jump to the agent and tell it there.
 
-- **No setup.** A PR appears when an agent running in Herdr has one open on its branch.
+- **No setup.** A PR appears when an agent running in Herdr has one open on its branch, or on a branch in one of its repo's worktrees.
 - **Plain facts.** `No CI` and `No review` say so, and never count as passed.
 - **After the merge too.** See which workflow is running and which step it's on, using the names in your own workflow files.
 - **Linked issues.** Read the issue a PR closes without leaving the panel.
@@ -59,7 +59,7 @@ Or ask an agent running in Herdr:
 Read ~/.config/herdr-app/AGENTS.md, then add this mod: github.com/jjangsky/herdr-pr-flow
 ```
 
-To update, run `git pull` in your clone and copy the folder again. To remove it, press `cmd-shift-l` to go back to your earlier layout, then delete `~/.config/herdr-app/mods/pr-flow` and `~/.config/herdr-app/layouts/main-pr.json`. Your terminals and agents aren't affected.
+To update, run `git pull` in your clone and copy the folder again. When a newer release is out, the panel's header shows `Update v…`: it opens what changed and a prompt to give your agent. To remove it, press `cmd-shift-l` to go back to your earlier layout, then delete `~/.config/herdr-app/mods/pr-flow` and `~/.config/herdr-app/layouts/main-pr.json`. Your terminals and agents aren't affected.
 
 ## Using it
 
@@ -154,7 +154,7 @@ Once found, a PR stays listed after its agent exits or changes branch. A closed 
 
 ## Settings
 
-The settings button at the top of the panel chooses the language: follow the system, 한국어 or English.
+The settings button at the top of the panel chooses the language: follow the system, 한국어 or English. It also shows your version, and `Check for new versions` turns the update notice off or on. `Later` hides the notice until the next release.
 
 Everything else goes in the block's `props` in your layout file (`~/.config/herdr-app/layouts/main-pr.json`):
 
@@ -176,9 +176,11 @@ Everything else goes in the block's `props` in your layout file (`~/.config/herd
 This is what the mod does on your machine, all with your own login. It stores no credentials.
 
 - `gh pr list`, `gh search prs --author @me` (with `mine`), `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view` and read-only `gh api` calls
+- At most once a day, `gh api repos/jjangsky/herdr-pr-flow/releases/latest` for the update notice. It never installs anything
 - When you send a comment: `gh api -X POST repos/<repo>/pulls/<number>/comments`
 - With `merge`, when you press the button twice: `gh pr merge <url> --<method> --match-head-commit <sha>`. No `--admin`, no branch deletion
-- `git remote get-url origin` in each agent's folder
+- `git remote get-url origin` and `git worktree list --porcelain` in each agent's folder
+- `gh pr list` once per repo, to match open PRs with its worktrees' branches
 - `sh` to read your language, and `defaults` on macOS when the app has no `LANG`
 - `open`, `xdg-open` or `explorer.exe` to open a link
 
@@ -188,14 +190,14 @@ This is what the mod does on your machine, all with your own login. It stores no
 | --- | --- |
 | No panel after installing | The built-in `main` layout doesn't take new panels. Run the `layout.clone` line, then copy the folder again under a fresh start: remove `mods/pr-flow`, then copy it |
 | `GitHub CLI is not ready` | Run `gh auth login`, then refresh |
-| A PR is missing | Check that an agent is running on that branch, the PR is open, and the folder's `origin` is on GitHub |
+| A PR is missing | Check that an agent is running in that repo, on the PR's branch or with it in a worktree, the PR is open, and the folder's `origin` is on GitHub |
 | A linked issue is missing | Use `Closes #5` in the PR body. A plain `#5` isn't a link |
 | No workflows after a merge | The repo has no GitHub Actions run on the merge commit. Other deploy systems aren't shown |
 | `Could not load the log` | Very large logs can pass the app's 30 second and 8 MiB limit. Open it on GitHub |
 
 ## Limits
 
-- PRs are found through agents running in Herdr. PRs you opened elsewhere aren't listed unless `mine` is on. PRs that only ask for your review aren't listed.
+- PRs are found through agents running in Herdr: on the agent's branch, or on a branch checked out in a worktree of the agent's repo. A worktree PR is attached to the agent only when it's the one agent in that repo. An agent started in a folder above the repo finds nothing. PRs you opened elsewhere aren't listed unless `mine` is on. PRs that only ask for your review aren't listed.
 - The refresh button updates listed PRs. It doesn't look for new ones, which arrive on the timer above.
 - Step-by-step tracking is for GitHub Actions after a merge. Before a merge you see each check's name and result. Deploys outside Actions, such as Vercel, aren't shown.
 - Comments go on one line of the diff, and each is sent right away, not as a batch. A thread shows up to 20 comments.
@@ -223,7 +225,7 @@ npm version minor -m "Release v%s"
 git push origin main --follow-tags
 ```
 
-The tag runs the tests and publishes a GitHub release with notes from the merged PRs. A tag that doesn't match `package.json` fails.
+`npm version` also writes the version into `mods/pr-flow/version.js`, which the update notice compares with the latest release. The tag runs the tests and publishes a GitHub release with notes from the merged PRs. A tag that doesn't match `package.json` fails.
 
 ## License
 

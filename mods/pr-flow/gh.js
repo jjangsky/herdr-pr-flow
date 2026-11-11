@@ -40,6 +40,11 @@ export function runIdFromUrl(url) {
   return m ? m[1] : null;
 }
 
+// Branches checked out in a repo's worktrees, from `git worktree list --porcelain`.
+export function parseWorktrees(text) {
+  return [...new Set(String(text).split('\n').map((l) => /^branch refs\/heads\/(.+)$/.exec(l.trim())?.[1]).filter(Boolean))];
+}
+
 export function createGh(exec) {
   const run = async (args) => {
     const r = await exec('gh', args);
@@ -50,6 +55,8 @@ export function createGh(exec) {
   return {
     // Open PRs only: an agent sitting on `main` would otherwise pick up an old merged PR.
     discover: async (repo, branch) => (await json(['pr', 'list', '-R', repo, '--head', branch, '--state', 'open', '--limit', '1', '--json', 'url']))[0]?.url ?? null,
+    // A repo's open PRs and their branches, matched against its worktrees. One call per repo.
+    openPrs: async (repo) => (await json(['pr', 'list', '-R', repo, '--state', 'open', '--limit', '100', '--json', 'url,headRefName'])).map((p) => ({ url: p.url, branch: p.headRefName })),
     // Every open PR you authored, for the `mine` prop.
     mine: async () => (await json(['search', 'prs', '--author', '@me', '--state', 'open', '--limit', '100', '--json', 'url'])).map((p) => p.url),
     fetchPr: (url) => json(['pr', 'view', url, '--json', PR_FIELDS]),
@@ -80,5 +87,7 @@ export function createGh(exec) {
       await run(['pr', 'merge', url, `--${method}`, '--match-head-commit', headSha]);
     },
     authOk: async () => (await exec('gh', ['auth', 'status'])).code === 0,
+    // Once a day at most, for the update notice (update.js).
+    latestRelease: (repo) => json(['api', `repos/${repo}/releases/latest`]),
   };
 }

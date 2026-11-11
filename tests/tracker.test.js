@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createTracker } from '../mods/pr-flow/tracker.js';
-import { createGh, cleanRunLog, parsePrUrl, parseRemote, runIdFromUrl } from '../mods/pr-flow/gh.js';
+import { createGh, cleanRunLog, parsePrUrl, parseRemote, parseWorktrees, runIdFromUrl } from '../mods/pr-flow/gh.js';
 import { sanitize } from '../mods/pr-flow/text.js';
 
 const URL = 'https://github.com/o/r/pull/7';
@@ -177,4 +177,67 @@ test('parsers', () => {
   assert.equal(cleanRunLog('job\tstep\t2026-01-01T00:00:00.000Z boom\n##[group]x'), 'boom');
   // GitHub starts a log with a byte order mark, and marks errors with a prefix.
   assert.equal(cleanRunLog('unit\tRun\t\ufeff2026-11-03T15:32:58.7760071Z ##[group]Run\nunit\tRun\t2026-11-03T15:32:59.0Z ##[error]Process failed'), 'Process failed');
+});
+
+function worktreeSetup({ open = [{ url: 'https://github.com/o/r/pull/9', branch: 'wt' }], trees = { '/w': ['main', 'wt'] } } = {}) {
+  const calls = { openPrs: 0, discover: 0 };
+  let clock = 1_000_000;
+  const gh = {
+    discover: async () => { calls.discover += 1; return null; },
+    openPrs: async () => { calls.openPrs += 1; return open; },
+    fetchPr: async (url) => ({ url, title: 'T', body: '', state: 'OPEN', headRefOid: 'a', headRefName: 'wt', statusCheckRollup: [], updatedAt: '2026-01-01T00:00:00Z' }),
+    fetchThreads: async () => ({ threads: [], headCommittedAt: null }),
+  };
+  const tracker = createTracker({
+    gh, settings: { pollMs: 30_000, ciWaitMs: 120_000, aiChecks: [] }, now: () => clock,
+    remoteOf: async () => 'o/r', worktreesOf: async (cwd) => trees[cwd] ?? [],
+    store: { load: () => ({}), save: () => {} },
+  });
+  return { tracker, calls, advance: (ms) => { clock += ms; } };
+}
+
+test('a PR from a worktree branch appears, with the agent of that repo attached', async () => {
+  const { tracker } = worktreeSetup();
+  await tracker.tick([agent({ branch: 'main' })]);
+  const [card] = tracker.cards();
+  assert.equal(card.number, 9);
+  assert.equal(card.agent.address, 't1');
+});
+
+test('worktree PRs cost one call per repo, and wait like branch discovery', async () => {
+  const { tracker, calls, advance } = worktreeSetup({ open: [] });
+  await tracker.tick([agent({ branch: 'main' }), agent({ address: 't2', branch: 'main' })]);
+  assert.equal(calls.openPrs, 1);
+  await tracker.tick([agent({ branch: 'main' })]);
+  assert.equal(calls.openPrs, 1);
+  advance(31_000);
+  await tracker.tick([agent({ branch: 'main' })]);
+  assert.equal(calls.openPrs, 2);
+});
+
+test('no worktree besides the agent\'s own branch asks nothing', async () => {
+  const { tracker, calls } = worktreeSetup({ trees: { '/w': ['main'] } });
+  await tracker.tick([agent({ branch: 'main' })]);
+  assert.equal(calls.openPrs, 0);
+  assert.equal(tracker.cards().length, 0);
+});
+
+test('with two agents in the repo, a worktree PR has no agent attached', async () => {
+  const { tracker } = worktreeSetup({ trees: { '/w': ['main', 'wt'], '/v': ['main', 'wt'] } });
+  await tracker.tick([agent({ branch: 'main' }), agent({ address: 't2', cwd: '/v', branch: 'main' })]);
+  const [card] = tracker.cards();
+  assert.equal(card.number, 9);
+  assert.equal(card.agent, null);
+});
+
+test('PRs on branches without a worktree are not listed', async () => {
+  const { tracker } = worktreeSetup({ open: [{ url: 'https://github.com/o/r/pull/9', branch: 'someone-else' }] });
+  await tracker.tick([agent({ branch: 'main' })]);
+  assert.equal(tracker.cards().length, 0);
+});
+
+test('parseWorktrees lists checked-out branches once, skipping detached ones', () => {
+  const text = 'worktree /r\nHEAD a\nbranch refs/heads/main\n\nworktree /r/.w/x\nHEAD b\nbranch refs/heads/feat/x\n\nworktree /r/.w/y\nHEAD c\ndetached\n\nworktree /r/.w/z\nHEAD d\nbranch refs/heads/feat/x\n';
+  assert.deepEqual(parseWorktrees(text), ['main', 'feat/x']);
+  assert.deepEqual(parseWorktrees(''), []);
 });

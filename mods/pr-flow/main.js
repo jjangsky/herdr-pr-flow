@@ -3,12 +3,14 @@
 import { View, div, svg } from "gpui-kit";
 import { v_flex, h_flex, Scrollbar, TextView, v_virtual_list, TextareaState, Textarea } from "gpui-base";
 import { agents, panes, spaces, focused, exec, run, theme, props, settings, shared, setShared, nextCommand, window as appWindow } from "herdr";
-import { MERGE_METHODS, createGh, parseRemote, runIdFromUrl } from "./gh.js";
+import { MERGE_METHODS, createGh, parseRemote, parseWorktrees, runIdFromUrl } from "./gh.js";
 import { createTracker } from "./tracker.js";
 import { translator, relative, effectiveLang } from "./i18n.js";
 import { facts, steps, openThreads, logTail, flowLine, flowRows, jobSteps, issueState, issueLabel, orgsOf, byOrg, reposOf, byRepo } from "./present.js";
 import { parseDiff, commentTarget, withComments } from "./diff.js";
 import { parseDuration, sanitize } from "./text.js";
+import { REPO, due, parseRelease, offer, updatePrompt } from "./update.js";
+import { VERSION } from "./version.js";
 
 const MOD = "pr-flow";
 const VIEW_KEY = "pr-flow.view";
@@ -110,6 +112,10 @@ export default class PrFlow extends View {
         const r = await exec("git", ["--no-optional-locks", "remote", "get-url", "origin"], { cwd, on: on ?? undefined });
         return r.code === 0 ? parseRemote(r.stdout) : null;
       },
+      worktreesOf: async (cwd, on) => {
+        const r = await exec("git", ["--no-optional-locks", "worktree", "list", "--porcelain"], { cwd, on: on ?? undefined });
+        return r.code === 0 ? parseWorktrees(r.stdout) : [];
+      },
       store: {
         load: () => { try { return JSON.parse(localStorage.getItem("tracked") ?? "{}"); } catch { return {}; } },
         save: (data) => localStorage.setItem("tracked", JSON.stringify(data)),
@@ -132,6 +138,11 @@ export default class PrFlow extends View {
     this.mergeArmed = null; // url
     this.merging = null; // url
     this.mergeError = null; // { url, message }
+    // Update notice: at most one check a day, kept in localStorage across restarts.
+    this.update = this.loadUpdate();
+    this.copied = false;
+    this.checkUpdate(cx);
+    cx.timer.every(60 * 60_000, (cx) => this.checkUpdate(cx));
     this.tick(cx);
     cx.timer.every(TICK_MS, (cx) => this.tick(cx));
     cx.timer.every(60_000, (cx) => cx.notify()); // "5분 전" moves on
@@ -168,6 +179,23 @@ export default class PrFlow extends View {
     else if (name === "checks") this.toggle("checks");
     else if (name === "first-file" && card?.pr?.files?.[0]) this.showFile(card, card.pr.files[0].path);
     else if (name === "log" && card) { const l = this.logFor(card); if (l?.tail) this.showLog(card, l); }
+  }
+
+  loadUpdate() {
+    try { const s = JSON.parse(localStorage.getItem("update") ?? "{}"); return s && typeof s === "object" ? s : {}; } catch { return {}; }
+  }
+
+  saveUpdate(change) {
+    this.update = { ...this.update, ...change };
+    localStorage.setItem("update", JSON.stringify(this.update));
+  }
+
+  checkUpdate(cx) {
+    if (!due(this.update, Date.now())) return;
+    this.saveUpdate({ checked: Date.now() }); // before asking, so a failure waits a day too
+    cx.spawn(async (cx) => {
+      try { const latest = parseRelease(await this.gh.latestRelease(REPO)); if (latest) { this.saveUpdate({ latest }); cx.notify(); } } catch {}
+    });
   }
 
   toggle(key) {
@@ -429,6 +457,9 @@ export default class PrFlow extends View {
       .child(div().font_semibold().child(tr("title")))
       .when(count > 0, (e) => e.child(div().px(6).rounded(5).bg(t.raised).text_size(11).text_color(t.muted).child(String(count))))
       .child(div().flex_1())
+      .when(Boolean(offer(this.update, VERSION)), (e) => e.child(h_flex().id("update").h(22).px(7).gap(5).flex_none().items_center().rounded(6).text_size(11.5).cursor_pointer()
+        .text_color(t.accent).hover((s) => s.bg(t.hover)).on_click((_e, cx) => { this.settingsOpen = true; cx.notify(); })
+        .child(div().size(6).rounded(3).bg(t.accent)).child(tr("update_pill", offer(this.update, VERSION).tag))))
       .child(h_flex().id("settings").size(26).items_center().justify_center().rounded(6).cursor_pointer().hover((s) => s.bg(t.hover))
         .on_click((_e, cx) => { this.settingsOpen = true; cx.notify(); })
         .child(icon("settings", 14, t.muted)))
@@ -493,6 +524,21 @@ export default class PrFlow extends View {
   settingsScreen(t) {
     const tr = this.t, choice = this.langChoice();
     const options = [["auto", tr("lang_auto")], ["ko", "한국어"], ["en", "English"]];
+    const latest = offer(this.update, VERSION), checking = !this.update.off;
+    const button = (id, label, primary, action) => h_flex().id(id).h(28).px(10).flex_none().items_center().rounded(7).border_1()
+      .border_color(primary ? t.solid : t.input).bg(primary ? t.solid : t.raised).text_color(primary ? t.solid_foreground : t.foreground)
+      .text_size(12).cursor_pointer().hover((st) => st.opacity(0.88)).on_click(action).child(label);
+    const update = latest && v_flex().px(14).gap(8)
+      .child(div().text_size(13.5).font_semibold().child(tr("update_title", latest.tag)))
+      .child(div().text_size(12).text_color(t.muted).child(tr("update_have", VERSION)))
+      .child(div().px(10).py(8).rounded(8).bg(t.raised).border_1().border_color(t.border).font_family(mono()).text_size(11.5).child(updatePrompt(this.lang)))
+      .child(h_flex().gap(6).flex_wrap()
+        .child(button("update-copy", this.copied ? tr("update_copied") : tr("update_copy"), true, (_e, cx) => { cx.write_to_clipboard(updatePrompt(this.lang)); this.copied = true; cx.notify(); }))
+        .child(button("update-page", tr("update_page"), false, () => openExternal(latest.url)))
+        .child(button("update-later", tr("update_later"), false, (_e, cx) => { this.saveUpdate({ dismissed: latest.tag }); cx.notify(); })))
+      .child(div().pt(6).text_size(11.5).text_color(t.dim).child(tr("update_changed")))
+      .child(div().h(220).flex_none().text_size(12).text_color(t.muted)
+        .child(TextView.markdown("update-notes", latest.notes?.trim() || tr("update_no_notes")).scrollable(true).selectable(true).size_full()));
     return v_flex().size_full()
       .child(h_flex().h(42).flex_none().px(8).gap(4).items_center().border_b(1).border_color(t.border)
         .child(h_flex().id("settings-back").px(6).h(26).gap(2).items_center().rounded(6).cursor_pointer().hover((s) => s.bg(t.hover))
@@ -505,7 +551,13 @@ export default class PrFlow extends View {
         h_flex().id(`lang-${value}`).w_full().h(32).flex_none().px(6).gap(8).items_center().rounded(6).cursor_pointer().when(choice === value, (e) => e.bg(t.selected)).hover((s) => s.bg(t.hover))
           .on_click(() => setShared(LANG_KEY, value))
           .child(div().flex_1().child(label))
-          .when(choice === value, (e) => e.child(icon("check", 13, t.ansi2))))));
+          .when(choice === value, (e) => e.child(icon("check", 13, t.ansi2))))))
+      .child(this.section(tr("version"), t))
+      .child(update || div().px(14).text_size(12.5).text_color(t.muted).child(checking ? tr("update_latest", VERSION) : tr("update_off", VERSION)))
+      .child(div().px(8).pt(8).child(h_flex().id("update-check").w_full().h(32).px(6).gap(8).items_center().rounded(6).cursor_pointer().hover((s) => s.bg(t.hover))
+        .on_click((_e, cx) => { this.saveUpdate({ off: checking, checked: 0 }); this.checkUpdate(cx); cx.notify(); })
+        .child(div().flex_1().child(tr("update_check")))
+        .when(checking, (e) => e.child(icon("check", 13, t.ansi2)))));
   }
 
   section(title, t) {
