@@ -8,7 +8,7 @@ A full-height panel on the right of the Herdr window. It lists every open pull r
 
 The panel is 340px wide, drawn with `theme()` colors on `background`, with a 1px `border` and 10px corners. Every screen has a 42px header with a bottom border. Text is 13px, with 11.5px dim captions.
 
-- **List.** Header: `Pull requests`, a count chip, a settings button, a refresh button (26px, hover `hover`). Cards, 10px padding and 8px corners, selected on `selected`:
+- **List.** Header: `Pull requests`, a count chip, an `Update v…` pill (accent dot and text, only while a newer release waits; opens settings), a settings button, a refresh button (26px, hover `hover`). Cards, 10px padding and 8px corners, selected on `selected`:
   1. Title, truncated, medium weight. Dimmed when merged and all its workflows have settled.
   2. `repo #number · Issue #5` on the left, the update time on the right, in `dim`.
   3. Facts with 12px icons: CI, review, open comment count, merge state.
@@ -16,7 +16,7 @@ The panel is 340px wide, drawn with `theme()` colors on `background`, with a 1px
   5. The agent, if there is one: status mark, then `Claude Code · space name`.
 - **PR detail.** Header: `List` back button, `GitHub` link. Title at 15px semibold, `owner/repo #n`, `head → base`. An agent row on `raised`, 38px, with `Go`. Then the sections `Progress` (a vertical timeline with 20px marks joined by a 1px `border` line), failed log (the last 8 lines in the terminal font), linked issues, open comments, changed files with `+n −n`, and the description as markdown. `No linked issues` stands in when there are none.
 - **Issue.** Header: `PR #n` back button, `GitHub`. Title, state dot and label, number, author, age, label chips, body as markdown, the last 20 comments on `raised`.
-- **Settings.** Header: `List` back button, `Settings`. A `Language` section: follow system, 한국어, English, with a check on the chosen one.
+- **Settings.** Header: `List` back button, `Settings`. A `Language` section: follow system, 한국어, English, with a check on the chosen one. A `Version` section: `v0.5.0 · up to date`, or the newer release's title, the update prompt in a mono box, `Copy prompt` (primary), `Release page`, `Later` (hides it until a newer tag) and its notes as markdown; then a `Check for new versions` row with a check. One `gh api repos/<repo>/releases/latest` a day at most, saved in localStorage; `version.js` holds this copy's version and `npm version` rewrites it.
 - **Viewer pane.** Opened beside a terminal for a diff or a full log. For a diff, a 220px file list (150px below 620px wide) and numbered lines 20px tall, tinted with `ansi2`/`ansi1` at `18` alpha.
 - **Empty.** A merge icon, `No pull requests yet`, and one line of help, centered.
 
@@ -42,7 +42,7 @@ A layout block: `{ "type": "block", "content": { "mod": "pr-flow", "props": { "p
 
 Uses `agents()`, `panes()` (`cwd` and `branch` for each agent), `spaces()` (`machine`), `exec`, `run`, `theme`, `settings`, `shared`, `setShared`, `nextCommand`, `window`. Commands: `agent.focus`, `pane.split`, `pane.focus`, `pane.close`, `tab.new`.
 
-Programs: `gh` (`pr list`, `pr view`, `pr diff`, `issue view`, `run view`, `auth status`, `api` with the GraphQL review threads and linked issues query, `actions/runs?head_sha=`, `actions/runs/<id>/jobs`), `git remote get-url origin`, `sh`, `defaults`, and `open`, `xdg-open` or `explorer.exe`. Nothing it calls writes to GitHub.
+Programs: `gh` (`pr list`, `pr view`, `pr diff`, `issue view`, `run view`, `auth status`, `api` with the GraphQL review threads and linked issues query, `actions/runs?head_sha=`, `actions/runs/<id>/jobs`), `git remote get-url origin`, `git worktree list --porcelain` (an agent started in the repo folder that works in a worktree keeps the folder's branch, so each repo's open PRs, one `gh pr list` per repo on the same wait as branch discovery, are matched against its worktree branches; the agent is attached only when it's the one agent in that repo), `sh`, `defaults`, and `open`, `xdg-open` or `explorer.exe`. Nothing it calls writes to GitHub.
 
 ## Watch out
 

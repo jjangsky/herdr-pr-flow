@@ -8,7 +8,8 @@
     "node": ">=20"
   },
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "version": "node scripts/sync-version.mjs && git add mods/pr-flow/version.js"
   },
   "license": "MIT"
 }

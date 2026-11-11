@@ -12,7 +12,7 @@
 
 PR Flow는 조회만 합니다. 예외는 직접 실행하는 두 가지, diff 줄에 코멘트를 보낼 때와 머지 버튼(`merge`, 기본은 꺼짐)을 쓸 때입니다. 에이전트에게는 아무것도 보내지 않습니다. 할 일이 있으면 그 에이전트로 이동해서 직접 말하면 됩니다.
 
-- **설정 없음:** Herdr에서 돌아가는 에이전트의 브랜치에 열린 PR이 있으면 자동으로 나타납니다.
+- **설정 없음:** Herdr에서 돌아가는 에이전트의 브랜치나, 그 레포 워크트리의 브랜치에 열린 PR이 있으면 자동으로 나타납니다.
 - **있는 그대로의 상태:** `CI 없음`, `리뷰 없음`은 없다고 표시하고, 통과로 치지 않습니다.
 - **머지 후까지:** 어떤 워크플로가 몇 번째 단계에 있는지 보여줍니다. 이름은 저장소의 워크플로 파일에 적힌 그대로입니다.
 - **연결된 이슈:** PR이 닫을 이슈를 패널에서 바로 읽습니다.
@@ -59,7 +59,7 @@ Herdr 안의 에이전트에게 맡겨도 됩니다.
 Read ~/.config/herdr-app/AGENTS.md, then add this mod: github.com/jjangsky/herdr-pr-flow
 ```
 
-업데이트하려면 클론한 폴더에서 `git pull`을 실행한 뒤 폴더를 다시 복사합니다. 제거하려면 `cmd-shift-l`로 이전 레이아웃으로 돌아간 뒤 `~/.config/herdr-app/mods/pr-flow`와 `~/.config/herdr-app/layouts/main-pr.json`을 지웁니다. 터미널과 에이전트는 영향을 받지 않습니다.
+업데이트하려면 클론한 폴더에서 `git pull`을 실행한 뒤 폴더를 다시 복사합니다. 새 버전이 나오면 패널 위쪽에 `v… 업데이트`가 뜨고, 누르면 바뀐 점과 에이전트에게 줄 프롬프트가 나옵니다. 제거하려면 `cmd-shift-l`로 이전 레이아웃으로 돌아간 뒤 `~/.config/herdr-app/mods/pr-flow`와 `~/.config/herdr-app/layouts/main-pr.json`을 지웁니다. 터미널과 에이전트는 영향을 받지 않습니다.
 
 ## 사용법
 
@@ -154,7 +154,7 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 
 ## 설정
 
-패널 위쪽의 설정 버튼에서 언어를 고릅니다. 시스템 언어 따르기, 한국어, English 중에서 선택합니다.
+패널 위쪽의 설정 버튼에서 언어를 고릅니다. 시스템 언어 따르기, 한국어, English 중에서 선택합니다. 지금 버전도 여기에 나오고, `새 버전 확인`으로 업데이트 알림을 끄거나 켭니다. `나중에`를 누르면 다음 릴리스까지 알림이 숨겨집니다.
 
 나머지는 레이아웃 파일(`~/.config/herdr-app/layouts/main-pr.json`)의 블록 `props`에 적습니다.
 
@@ -176,9 +176,11 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 이 모드가 PC에서 실행하는 명령입니다. 모두 사용자의 로그인으로 실행하고, 인증 정보는 저장하지 않습니다.
 
 - `gh pr list`, `gh search prs --author @me` (`mine`일 때), `gh pr view`, `gh pr diff`, `gh issue view`, `gh run view`, 읽기 전용 `gh api` 호출
+- 업데이트 알림용으로 하루 한 번 이하 `gh api repos/jjangsky/herdr-pr-flow/releases/latest`. 아무것도 설치하지 않습니다
 - 코멘트를 보낼 때: `gh api -X POST repos/<repo>/pulls/<number>/comments`
 - `merge`를 켜고 버튼을 두 번 눌렀을 때: `gh pr merge <url> --<방식> --match-head-commit <sha>`. `--admin`도 브랜치 삭제도 하지 않음
-- 각 에이전트 폴더에서 `git remote get-url origin`
+- 각 에이전트 폴더에서 `git remote get-url origin`, `git worktree list --porcelain`
+- 레포마다 한 번 `gh pr list`. 열린 PR을 워크트리 브랜치와 맞춰 봅니다
 - 언어를 읽는 `sh`, 앱에 `LANG`이 없을 때 macOS의 `defaults`
 - 링크를 여는 `open`, `xdg-open`, `explorer.exe`
 
@@ -188,14 +190,14 @@ PR Flow는 일정 주기로 GitHub에 물어봅니다. 그래서 아래 시간�
 | --- | --- |
 | 설치했는데 패널이 안 보임 | 기본 `main` 레이아웃에는 새 패널이 붙지 않습니다. `layout.clone`을 실행한 뒤 `mods/pr-flow`를 지우고 다시 복사하세요 |
 | `GitHub CLI를 쓸 수 없습니다` | `gh auth login`을 실행한 뒤 새로고침하세요 |
-| PR이 안 보임 | 그 브랜치에 에이전트가 있는지, PR이 열려 있는지, 폴더의 `origin`이 GitHub인지 확인하세요 |
+| PR이 안 보임 | 그 레포에 에이전트가 있는지(PR 브랜치에 있거나 워크트리로 갖고 있는지), PR이 열려 있는지, 폴더의 `origin`이 GitHub인지 확인하세요 |
 | 연결된 이슈가 안 보임 | PR 본문에 `Closes #5`를 적으세요. `#5`만 적으면 연결이 아닙니다 |
 | 머지 후 워크플로가 안 보임 | 머지 커밋에서 실행된 GitHub Actions가 없는 경우입니다. 다른 배포 도구는 보이지 않습니다 |
 | `로그를 불러오지 못했습니다` | 아주 큰 로그는 앱의 30초, 8MiB 제한에 걸릴 수 있습니다. GitHub에서 확인하세요 |
 
 ## 제한 사항
 
-- PR은 Herdr에서 돌아가는 에이전트를 통해 찾습니다. 다른 곳에서 올린 PR은 `mine`을 켜야 나옵니다. 리뷰 요청만 받은 PR은 나오지 않습니다.
+- PR은 Herdr에서 돌아가는 에이전트를 통해 찾습니다. 에이전트의 브랜치, 또는 에이전트 레포의 워크트리 브랜치에 열린 PR입니다. 워크트리 PR은 그 레포에 에이전트가 하나일 때만 에이전트와 연결됩니다. 레포보다 위 폴더에서 시작한 에이전트로는 찾지 못합니다. 다른 곳에서 올린 PR은 `mine`을 켜야 나옵니다. 리뷰 요청만 받은 PR은 나오지 않습니다.
 - 새로고침 버튼은 목록에 있는 PR만 갱신합니다. 새 PR은 위 주기에 맞춰 나타납니다.
 - 단계별 추적은 머지 후 GitHub Actions만 지원합니다. 머지 전에는 체크 이름과 결과까지 보여줍니다. Vercel처럼 Actions 밖에서 도는 배포는 보이지 않습니다.
 - 코멘트는 diff의 한 줄에 달리고, 모아 보내지 않고 바로 하나씩 올라갑니다. 스레드마다 코멘트를 20개까지 보여줍니다.
@@ -223,7 +225,7 @@ npm version minor -m "Release v%s"
 git push origin main --follow-tags
 ```
 
-태그가 올라가면 테스트를 돌린 뒤, 머지된 PR로 노트를 만들어 GitHub 릴리스를 발행합니다. 태그가 `package.json`과 다르면 실패합니다.
+`npm version`은 버전을 `mods/pr-flow/version.js`에도 적습니다. 업데이트 알림은 이 값을 최신 릴리스와 비교합니다. 태그가 올라가면 테스트를 돌린 뒤, 머지된 PR로 노트를 만들어 GitHub 릴리스를 발행합니다. 태그가 `package.json`과 다르면 실패합니다.
 
 ## 라이선스
 

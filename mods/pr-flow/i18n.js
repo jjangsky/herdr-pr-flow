@@ -16,6 +16,7 @@ const STRINGS = {
     org_all: 'All', repo_all: 'All repos',
     comment_hint: 'Click a line to comment', comment_on: (where) => `Comment on ${where}`, comment_placeholder: 'Leave feedback', comment_send: 'Send', comment_sending: 'Sending…', comment_cancel: 'Cancel',
     merge_do: (m) => `Merge (${m})`, merge_confirm: 'Press again to merge', merging: 'Merging…',
+    update_pill: (tag) => `Update ${tag}`, version: 'Version', update_title: (tag) => `PR Flow ${tag} is out`, update_have: (v) => `You have v${v}. To update, ask your Herdr agent:`, update_changed: 'What changed', update_no_notes: 'See the release page.', update_copy: 'Copy prompt', update_copied: 'Copied', update_page: 'Release page', update_later: 'Later', update_check: 'Check for new versions', update_latest: (v) => `v${v} · up to date`, update_off: (v) => `v${v}`,
     settings: 'Settings', language: 'Language', lang_auto: 'Follow system', just_now: 'just now', ago: (n, u) => `${n}${{ m: 'm', h: 'h', d: 'd' }[u]} ago`, close: 'Close',
   },
   ko: {
@@ -35,6 +36,7 @@ const STRINGS = {
     org_all: '전체', repo_all: '모든 레포',
     comment_hint: '줄을 누르면 코멘트를 남길 수 있습니다', comment_on: (where) => `${where} 코멘트`, comment_placeholder: '피드백을 입력하세요', comment_send: '보내기', comment_sending: '보내는 중…', comment_cancel: '취소',
     merge_do: (m) => `머지 (${m})`, merge_confirm: '한 번 더 누르면 머지', merging: '머지하는 중…',
+    update_pill: (tag) => `${tag} 업데이트`, version: '버전', update_title: (tag) => `PR Flow ${tag} 나왔습니다`, update_have: (v) => `지금은 v${v}입니다. 업데이트하려면 Herdr 에이전트에게 이렇게 말하세요:`, update_changed: '바뀐 점', update_no_notes: '릴리스 페이지를 보세요.', update_copy: '프롬프트 복사', update_copied: '복사했습니다', update_page: '릴리스 페이지', update_later: '나중에', update_check: '새 버전 확인', update_latest: (v) => `v${v} · 최신 버전`, update_off: (v) => `v${v}`,
     settings: '설정', language: '언어', lang_auto: '시스템 언어 따르기', just_now: '방금', ago: (n, u) => `${n}${{ m: '분', h: '시간', d: '일' }[u]} 전`, close: '닫기',
   },
 };

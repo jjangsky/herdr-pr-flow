@@ -18,13 +18,15 @@ function clean(pr) {
   return { ...pr, title: sanitize(pr.title), body: sanitize(pr.body) };
 }
 
-export function createTracker({ gh, remoteOf, store, settings, now = Date.now }) {
+export function createTracker({ gh, remoteOf, worktreesOf = async () => [], store, settings, now = Date.now }) {
   const tracked = store.load();
   const live = new Map(); // url -> { pr, threads, issues, fetchedAt, error }
   const flows = new Map(); // url -> { runs, jobs: { runId: { jobs, final } }, checkedAt }
   const discovered = new Map(); // repo:branch -> at
   const previous = new Map(); // address -> status
   const remotes = new Map(); // on:cwd -> { at, repo }
+  const worktrees = new Map(); // on:cwd -> { at, branches }
+  const scanned = new Map(); // on:repo -> at, for worktree PRs
   let agents = [];
   let lastError = '';
   let mineAt = -Infinity;
@@ -36,6 +38,15 @@ export function createTracker({ gh, remoteOf, store, settings, now = Date.now })
     const repo = await remoteOf(agent.cwd, agent.on).catch(() => null);
     remotes.set(key, { at: now(), repo });
     return repo;
+  }
+
+  async function branchesOf(agent) {
+    const key = `${agent.on ?? ''}:${agent.cwd}`;
+    const hit = worktrees.get(key);
+    if (hit && now() - hit.at < REMOTE_TTL_MS) return hit.branches;
+    const branches = await worktreesOf(agent.cwd, agent.on).catch(() => []);
+    worktrees.set(key, { at: now(), branches });
+    return branches;
   }
 
   function track(url, branch) {
@@ -59,6 +70,23 @@ export function createTracker({ gh, remoteOf, store, settings, now = Date.now })
     const entry = track(url, branch);
     store.save(tracked);
     await refresh(entry.url);
+  }
+
+  // An agent started in the repo's folder that then works in a worktree stays on the folder's branch.
+  // So each repo's worktree branches are matched against its open PRs: one `gh pr list` per repo.
+  async function discoverWorktrees(group) {
+    const [first] = group, key = `${first.on ?? ''}:${first.repo}`;
+    const wait = group.some((a) => a.status === 'working') ? DISCOVER_WORKING_MS : DISCOVER_IDLE_MS;
+    if (now() - (scanned.get(key) ?? -Infinity) < wait) return;
+    const own = new Set(group.map((a) => a.branch));
+    const extra = new Set(group.flatMap((a) => a.worktrees).filter((b) => !own.has(b)));
+    if (!extra.size) return;
+    scanned.set(key, now());
+    const prs = await gh.openPrs(first.repo).catch((error) => { lastError = error.message; return []; });
+    const added = prs.filter((p) => extra.has(p.branch) && !tracked[parsePrUrl(p.url)?.url]).map((p) => track(p.url, p.branch)).filter(Boolean);
+    if (!added.length) return;
+    store.save(tracked);
+    await inBatches(added, (e) => refresh(e.url));
   }
 
   // With `mine`, every open PR you authored is listed too, agent or not. One search every few minutes;
@@ -141,9 +169,13 @@ export function createTracker({ gh, remoteOf, store, settings, now = Date.now })
     }
   }
 
+  // The agent on the PR's branch; else the one agent whose repo has it in a worktree. With two
+  // or more such agents nobody can tell which one made it, so none is attached.
   const agentFor = (entry) => {
     const mine = agents.filter((a) => a.repo === entry.repo && a.branch === entry.branch);
-    return mine.find((a) => a.status === 'working') ?? mine[0] ?? null;
+    if (mine.length) return mine.find((a) => a.status === 'working') ?? mine[0];
+    const near = agents.filter((a) => a.repo === entry.repo && a.worktrees?.includes(entry.branch));
+    return near.length === 1 ? near[0] : null;
   };
 
   async function inBatches(items, fn) {
@@ -152,11 +184,17 @@ export function createTracker({ gh, remoteOf, store, settings, now = Date.now })
 
   // One round: `list` is what the app says about its agents right now.
   async function tick(list) {
-    const withRepo = await Promise.all(list.filter((a) => a.cwd).map(async (a) => ({ ...a, repo: await repoOf(a) })));
+    const withRepo = await Promise.all(list.filter((a) => a.cwd).map(async (a) => {
+      const repo = await repoOf(a);
+      return { ...a, repo, worktrees: repo ? await branchesOf(a) : [] };
+    }));
     agents = withRepo;
     // An agent that just finished has probably pushed or opened a PR, so look now.
     const finished = agents.filter((a) => previous.get(a.address) === 'working' && a.status !== 'working');
-    for (const a of finished) if (a.repo && a.branch) discovered.delete(`${a.repo}:${a.branch}`);
+    for (const a of finished) {
+      if (a.repo && a.branch) discovered.delete(`${a.repo}:${a.branch}`);
+      if (a.repo) scanned.delete(`${a.on ?? ''}:${a.repo}`);
+    }
     for (const a of agents) previous.set(a.address, a.status);
     const seen = new Set();
     const unique = agents.filter((a) => {
@@ -166,6 +204,9 @@ export function createTracker({ gh, remoteOf, store, settings, now = Date.now })
       return true;
     });
     await inBatches(unique, discover);
+    const repos = new Map();
+    for (const a of agents) if (a.repo) { const k = `${a.on ?? ''}:${a.repo}`; repos.set(k, [...(repos.get(k) ?? []), a]); }
+    await inBatches([...repos.values()], discoverWorktrees);
     await discoverMine();
     const fresh = new Set(finished.flatMap((a) => Object.values(tracked).filter((t) => t.repo === a.repo && t.branch === a.branch).map((t) => t.url)));
     const due = Object.values(tracked).filter((entry) => {
